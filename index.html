@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EternaFlux</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #000;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #main-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        canvas {
+            width: 100%;
+            height: calc(100% - 60px);
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: transparent; /* Transparent background */
+            border: 1px solid #fff; /* White 1px border */
+            border-radius: 0px;
+            color: #fff; /* White text */
+            position: absolute;
+            top: 10px;
+            right: 10px; /* Moved to top right */
+            z-index: 1;
+        }
+     
+        #fps {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="main-container">
+        <button id="toggleBtn">Start/Stop</button>
+        <div id="fps"></div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
+    <script>
+        // Audio setup with Tone.js
+        const chorus = new Tone.Chorus({
+            frequency: 1.5,
+            delayTime: 3.5,
+            depth: 0.7,
+            wet: 0.8
+        }).toDestination();
+
+        const mainSynth = new Tone.Synth({
+            oscillator: { type: "square" },
+            envelope: { attack: 0.1, decay: 0.2, sustain: 0.9, release: 1.5 }
+        }).connect(chorus);
+
+        const lead = new Tone.Synth({
+            oscillator: { type: "triangle" },
+            envelope: { attack: 0.05, decay: 0.2, sustain: 0.9, release: 1.5 }
+        }).toDestination();
+
+        const pad = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: "sine" },
+            envelope: { attack: 1, decay: 2, sustain: 0.9, release: 3 }
+        }).toDestination();
+
+        const noise = new Tone.NoiseSynth({
+            noise: { type: "white" },
+            envelope: { attack: 0.01, decay: 0.1, sustain: 0 }
+        }).toDestination();
+
+        const notes = ["C", "D", "Eb", "F", "G", "A", "Bb"];
+        const octaves = [3, 4, 5];
+
+        function randomNote(baseOctave) {
+            return notes[Math.floor(Math.random() * notes.length)] + (baseOctave + Math.floor(Math.random() * 2));
+        }
+
+        function randomChord() {
+            const root = randomNote(3);
+            return [
+                root,
+                Tone.Frequency(root).transpose(4).toNote(),
+                Tone.Frequency(root).transpose(7).toNote()
+            ];
+        }
+
+        const mainLoop = new Tone.Loop(time => {
+            mainSynth.triggerAttackRelease(randomNote(3), "8n", time);
+            if (isPlaying) {
+                for (let i = 0; i < 3; i++) {
+                    shapes.push(new Shape());
+                }
+            }
+        }, "8n");
+
+        const leadLoop = new Tone.Loop(time => {
+            lead.triggerAttackRelease(randomNote(4), "16n", time);
+        }, "16n");
+
+        const padLoop = new Tone.Loop(time => {
+            pad.triggerAttackRelease(randomChord(), "2n", time);
+        }, "4n");
+
+        const noiseLoop = new Tone.Loop(time => {
+            if (Math.random() < 0.3) {
+                noise.triggerAttackRelease("32n", time);
+            }
+        }, "16n");
+
+        Tone.Transport.bpm.value = 120;
+        let isPlaying = false;
+
+        // p5.js sketch
+        let shapes = [];
+        let fpsDisplay;
+
+        function setup() {
+            const canvas = createCanvas(windowWidth, windowHeight - 60, WEBGL);
+            canvas.parent('main-container');
+            background(0);
+            frameRate(60);
+            perspective(PI / 3.0, width / height, 1, 10000);
+            fpsDisplay = document.getElementById('fps');
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight - 60);
+            perspective(PI / 3.0, width / height, 1, 10000);
+        }
+
+        class Shape {
+            constructor() {
+                this.x = random(-width/4, width/4);
+                this.y = random(-height/4, height/4);
+                this.z = random(-200, 200);
+                this.baseSize = random(20, 80);
+                this.size = this.baseSize;
+                this.targetSize = random(30, 120);
+                this.type = Math.floor(random(4));
+                this.gray = random(100, 255);
+                this.life = random(30, 90);
+                this.morphSpeed = random(0.05, 0.15);
+                this.morphOffset = random(TWO_PI);
+                this.blink = Math.random() > 0.5;
+                this.glitchIntensity = 0;
+                this.explosion = 0;
+                this.explosionSpeed = random(1, 5);
+            }
+
+            update(freq) {
+                this.size = lerp(this.size, this.targetSize, 0.05);
+                if (Math.abs(this.size - this.targetSize) < 1) {
+                    this.targetSize = random(30, 120);
+                }
+                
+                this.size += Math.sin(frameCount * this.morphSpeed + this.morphOffset) * 10;
+                this.life--;
+                
+                if (Math.random() < 0.1) {
+                    this.blink = !this.blink;
+                }
+
+                this.glitchIntensity = random(0, 10);
+                if (Math.random() < 0.2) {
+                    this.x += random(-this.glitchIntensity, this.glitchIntensity);
+                    this.y += random(-this.glitchIntensity, this.glitchIntensity);
+                    this.z += random(-this.glitchIntensity, this.glitchIntensity);
+                }
+
+                this.explosion += this.explosionSpeed;
+                if (this.explosion > this.size * 2) {
+                    this.explosion = 0;
+                }
+            }
+
+            display() {
+                push();
+                translate(this.x, this.y, this.z);
+                
+                noFill();
+                stroke(this.blink ? this.gray : 0);
+                strokeWeight(2);
+                
+                let morphedSize = this.size * (0.8 + 0.2 * Math.sin(frameCount * 0.1));
+                let explodeSize = morphedSize + this.explosion;
+                
+                switch(this.type) {
+                    case 0: // Cube
+                        box(explodeSize);
+                        break;
+                    case 1: // Tetrahedron
+                        beginShape();
+                        let tSize = explodeSize / 2;
+                        vertex(-tSize, -tSize, -tSize);
+                        vertex(tSize, tSize, -tSize);
+                        vertex(tSize, -tSize, tSize);
+                        vertex(-tSize, tSize, tSize);
+                        endShape(CLOSE);
+                        break;
+                    case 2: // Octahedron
+                        beginShape();
+                        let oSize = explodeSize / 2;
+                        vertex(0, oSize, 0);
+                        vertex(oSize, 0, oSize);
+                        vertex(-oSize, 0, oSize);
+                        vertex(0, 0, -oSize);
+                        vertex(oSize, 0, -oSize);
+                        vertex(-oSize, 0, -oSize);
+                        endShape(CLOSE);
+                        break;
+                    case 3: // Icosahedron
+                        let iSize = explodeSize / 2;
+                        let phi = (1 + Math.sqrt(5)) / 2;
+                        beginShape();
+                        vertex(-iSize, phi * iSize, 0);
+                        vertex(iSize, phi * iSize, 0);
+                        vertex(iSize, -phi * iSize, 0);
+                        vertex(-iSize, -phi * iSize, 0);
+                        vertex(0, iSize, phi * iSize);
+                        vertex(0, iSize, -phi * iSize);
+                        endShape(CLOSE);
+                        break;
+                }
+                
+                if (Math.random() < 0.3) {
+                    stroke(255);
+                    strokeWeight(1);
+                    let offset = this.glitchIntensity;
+                    line(
+                        random(-explodeSize/2 - offset, explodeSize/2 + offset),
+                        random(-explodeSize/2 - offset, explodeSize/2 + offset),
+                        random(-explodeSize/2 - offset, explodeSize/2 + offset),
+                        random(-explodeSize/2 - offset, explodeSize/2 + offset)
+                    );
+                }
+                pop();
+            }
+
+            isDead() {
+                return this.life <= 0;
+            }
+        }
+
+        function draw() {
+            background(0);
+            push();
+            stroke(255, 50);
+            strokeWeight(1);
+            let gridSize = 400;
+            for (let x = -gridSize; x <= gridSize; x += 40) {
+                line(x, -gridSize, 0, x, gridSize, 0);
+                line(x, 0, -gridSize, x, 0, gridSize);
+            }
+            for (let z = -gridSize; z <= gridSize; z += 40) {
+                line(-gridSize, 0, z, gridSize, 0, z);
+            }
+            pop();
+
+            if (isPlaying) {
+                const freq = Tone.Frequency(randomNote(3)).toFrequency();
+                
+                for (let i = shapes.length - 1; i >= 0; i--) {
+                    shapes[i].update(freq);
+                    shapes[i].display();
+                    
+                    if (shapes[i].isDead()) {
+                        shapes.splice(i, 1);
+                    }
+                }
+            }
+
+            // Update FPS counter
+            fpsDisplay.textContent = `FPS: ${Math.round(frameRate())}`;
+        }
+
+        // Toggle button functionality
+        document.getElementById('toggleBtn').addEventListener('click', async () => {
+            if (!isPlaying) {
+                await Tone.start();
+                mainLoop.start(0);
+                leadLoop.start(0);
+                padLoop.start(0);
+                noiseLoop.start(0);
+                Tone.Transport.start();
+                isPlaying = true;
+            } else {
+                mainLoop.stop();
+                leadLoop.stop();
+                padLoop.stop();
+                noiseLoop.stop();
+                Tone.Transport.stop();
+                isPlaying = false;
+                shapes = [];
+            }
+        });
+    </script>
+</body>
+</html>
